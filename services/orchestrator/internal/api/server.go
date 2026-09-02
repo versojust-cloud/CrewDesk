@@ -17,6 +17,7 @@ import (
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/auth"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/billing"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/event"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/llm"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/skill/claw"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/skill/design"
@@ -54,6 +55,7 @@ type Dependencies struct {
 	// Both optional — the orchestrator starts fine when unwired.
 	Claw         *claw.Runner
 	ClawSessions *claw.SessionStore
+	Harness      *harness.Runtime
 
 	// AIImagesDir is the on-disk directory where NanoBanana writes its
 	// generated PNGs. The server mounts a static-file route under
@@ -211,6 +213,10 @@ func NewServer(deps Dependencies, addr string) *http.Server {
 		// Sprint AA.2 — replay log (JSON, not WS). FE hydrates on cold
 		// mount + back-fills the gap on reconnect via ?since=<seq>.
 		r.Get("/sessions/{id}/log", h.SessionEventLog)
+
+		// CrewDesk Harness discovery and append-only execution replay.
+		r.Get("/crew/agents", h.ListCrewAgents)
+		r.With(auth.Required).Get("/crew/threads/{id}/items", h.ListHarnessItems)
 
 		// Video — bridge to the Opendream FastAPI iteration backend.
 		// Every route 503s when VideoBridge is nil so the surface is

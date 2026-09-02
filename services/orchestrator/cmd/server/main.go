@@ -29,6 +29,7 @@ import (
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/billing"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/config"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/event"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/image"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/llm"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/llm/providers"
@@ -275,9 +276,33 @@ func main() {
 	// the route layer persists each terminal run to store.ClawRuns and
 	// ClawSessions.GetOrLoad rehydrates on an in-memory miss.
 	clawSessions := claw.NewSessionStoreWithDB(dataStore.ClawRuns)
+	crewAgents, err := harness.NewRegistry(claw.HarnessManifests()...)
+	if err != nil {
+		slog.Error("CrewDesk agent registry", "err", err)
+		os.Exit(1)
+	}
+	crewTools, err := harness.NewToolCatalog()
+	if err != nil {
+		slog.Error("CrewDesk tool catalog", "err", err)
+		os.Exit(1)
+	}
+	crewRuntime, err := harness.NewRuntime(crewAgents, crewTools, dataStore.HarnessItems)
+	if err != nil {
+		slog.Error("CrewDesk harness", "err", err)
+		os.Exit(1)
+	}
+	clawEmitter := harness.NewRecordingEmitter(hub, crewRuntime.Items)
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := clawEmitter.Flush(flushCtx); err != nil {
+			slog.Warn("CrewDesk item journal flush", "err", err)
+		}
+	}()
 	clawRunner := &claw.Runner{
 		Router:        router,
-		Emitter:       hub,
+		Emitter:       clawEmitter,
+		Harness:       crewRuntime,
 		Sessions:      clawSessions,
 		TavilyKey:     cfg.TavilyAPIKey,
 		SandboxClient: sandboxClient,
@@ -358,6 +383,7 @@ func main() {
 		GameSessions: gameSessions,
 		Claw:         clawRunner,
 		ClawSessions: clawSessions,
+		Harness:      crewRuntime,
 		// Mount only when nano-banana is actually enabled — otherwise
 		// the route serves nothing and just clutters the surface.
 		AIImagesDir: func() string {

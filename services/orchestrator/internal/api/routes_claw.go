@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/event"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/skill/claw"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/store"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/tool"
@@ -124,6 +125,7 @@ func (h *handlers) runClawJob(job *clawJob, wsID uuid.UUID) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	ctx = event.WithSessionID(ctx, job.SessionID)
+	ctx = harness.WithRunScope(ctx, newClawRunScope(wsID, job.SessionID))
 	if wsID != uuid.Nil {
 		ctx = tool.WithWorkspaceID(ctx, wsID)
 	}
@@ -213,22 +215,22 @@ type clawGameView struct {
 }
 
 type clawJobView struct {
-	JobID           string           `json:"job_id"`
-	SessionID       string           `json:"session_id"`
-	Status          string           `json:"status"`
-	Prompt          string           `json:"prompt"`
-	Title           string           `json:"title,omitempty"`
-	Plan            []clawTaskView   `json:"plan,omitempty"`
-	ArtifactVersion int              `json:"artifact_version,omitempty"`
-	ArtifactURL     string           `json:"artifact_url,omitempty"`
-	Figures         []clawFigureView `json:"figures,omitempty"`
-	Videos          []clawVideoView  `json:"videos,omitempty"`
-	Deck            *clawDeckView    `json:"deck,omitempty"`
-	Games           []clawGameView   `json:"games,omitempty"`
-	ClarificationQuestions []string  `json:"clarification_questions,omitempty"`
-	Error           string           `json:"error,omitempty"`
-	StartedAt       string           `json:"started_at"`
-	FinishedAt      string           `json:"finished_at,omitempty"`
+	JobID                  string           `json:"job_id"`
+	SessionID              string           `json:"session_id"`
+	Status                 string           `json:"status"`
+	Prompt                 string           `json:"prompt"`
+	Title                  string           `json:"title,omitempty"`
+	Plan                   []clawTaskView   `json:"plan,omitempty"`
+	ArtifactVersion        int              `json:"artifact_version,omitempty"`
+	ArtifactURL            string           `json:"artifact_url,omitempty"`
+	Figures                []clawFigureView `json:"figures,omitempty"`
+	Videos                 []clawVideoView  `json:"videos,omitempty"`
+	Deck                   *clawDeckView    `json:"deck,omitempty"`
+	Games                  []clawGameView   `json:"games,omitempty"`
+	ClarificationQuestions []string         `json:"clarification_questions,omitempty"`
+	Error                  string           `json:"error,omitempty"`
+	StartedAt              string           `json:"started_at"`
+	FinishedAt             string           `json:"finished_at,omitempty"`
 }
 
 func (h *handlers) GetClaw(w http.ResponseWriter, r *http.Request) {
@@ -585,6 +587,7 @@ func (h *handlers) continueClawJob(job *clawJob, userMessage string, wsID uuid.U
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	ctx = event.WithSessionID(ctx, job.SessionID)
+	ctx = harness.WithRunScope(ctx, newClawRunScope(wsID, job.SessionID))
 	if wsID != uuid.Nil {
 		ctx = tool.WithWorkspaceID(ctx, wsID)
 	}
@@ -599,12 +602,25 @@ func (h *handlers) resumeClawJob(job *clawJob, answers string, wsID uuid.UUID) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	ctx = event.WithSessionID(ctx, job.SessionID)
+	ctx = harness.WithRunScope(ctx, newClawRunScope(wsID, job.SessionID))
 	if wsID != uuid.Nil {
 		ctx = tool.WithWorkspaceID(ctx, wsID)
 	}
 
 	err := h.deps.Claw.Resume(ctx, job.ID, answers)
 	h.settleClawJob(ctx, job, wsID, err)
+}
+
+func newClawRunScope(workspaceID uuid.UUID, threadID string) harness.RunScope {
+	scope := harness.RunScope{
+		ThreadID: threadID,
+		TurnID:   uuid.NewString(),
+		AgentID:  claw.RoleCoordinator,
+	}
+	if workspaceID != uuid.Nil {
+		scope.WorkspaceID = workspaceID.String()
+	}
+	return scope
 }
 
 // persistTerminalClawRun upserts the finished/errored run into

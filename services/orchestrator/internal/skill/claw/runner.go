@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/event"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/image"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/llm"
 	pb "github.com/dreamwaver/dreamwaver/services/orchestrator/internal/pb/dreamwaverv1"
@@ -20,18 +21,19 @@ import (
 type Runner struct {
 	Router        llm.Router
 	Emitter       event.Emitter
+	Harness       *harness.Runtime
 	Sessions      *SessionStore
 	TavilyKey     string           // optional; empty greys out the researcher
-	SandboxClient pb.SandboxClient  // optional; nil greys out the engineer
-	Images        image.Searcher    // optional; the designer's image source
-	ImagesEnabled bool              // true when a real (non-Noop) image provider is wired
-	Pipeline      *slides.Pipeline  // optional; the producer's deck generator
-	Video         VideoGenerator    // optional; the videographer's image-to-video source (nil greys it out)
-	Editor        ImageEditor       // optional; the designer's post-production ops (nil greys edit_image out)
-	Variants      VariantMaker      // optional; the designer's multi-take generator (nil greys generate_variants out)
-	Game          GameMaker         // optional; the producer's playable-game maker (nil greys generate_game out)
-	DeckEditor    DeckEditor        // optional; the producer's deck-editor (nil greys edit_deck out)
-	KOL           KOLFinder         // optional; the researcher's KOL/influencer finder (nil greys find_kol out)
+	SandboxClient pb.SandboxClient // optional; nil greys out the engineer
+	Images        image.Searcher   // optional; the designer's image source
+	ImagesEnabled bool             // true when a real (non-Noop) image provider is wired
+	Pipeline      *slides.Pipeline // optional; the producer's deck generator
+	Video         VideoGenerator   // optional; the videographer's image-to-video source (nil greys it out)
+	Editor        ImageEditor      // optional; the designer's post-production ops (nil greys edit_image out)
+	Variants      VariantMaker     // optional; the designer's multi-take generator (nil greys generate_variants out)
+	Game          GameMaker        // optional; the producer's playable-game maker (nil greys generate_game out)
+	DeckEditor    DeckEditor       // optional; the producer's deck-editor (nil greys edit_deck out)
+	KOL           KOLFinder        // optional; the researcher's KOL/influencer finder (nil greys find_kol out)
 
 	// 真·动态改绑 — runtime role↔tool bindings + role enablement (config.go).
 	runnerConfigState

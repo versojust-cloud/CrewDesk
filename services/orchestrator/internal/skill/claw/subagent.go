@@ -14,14 +14,7 @@ import (
 // whole run budget. The producer (deck render via chromedp) and designer
 // (image-gen polling) need more headroom than the text roles.
 func subAgentTimeout(role string) time.Duration {
-	switch role {
-	case RoleProducer:
-		return 8 * time.Minute
-	case RoleDesigner:
-		return 6 * time.Minute
-	default:
-		return 4 * time.Minute
-	}
+	return time.Duration(roleTimeoutSeconds(role)) * time.Second
 }
 
 // runSubAgent builds and runs one role's ToolCallAgent. The agent runs under
@@ -142,8 +135,8 @@ func (r *Runner) roleEnabled(role string) bool {
 // availableRoles is the set the planner is allowed to assign tasks to.
 func (r *Runner) availableRoles() map[string]bool {
 	return map[string]bool{
-		RoleResearcher: r.roleEnabled(RoleResearcher),
-		RoleEngineer:   r.roleEnabled(RoleEngineer),
+		RoleResearcher:   r.roleEnabled(RoleResearcher),
+		RoleEngineer:     r.roleEnabled(RoleEngineer),
 		RoleDesigner:     r.roleEnabled(RoleDesigner),
 		RoleProducer:     r.roleEnabled(RoleProducer),
 		RoleVideographer: r.roleEnabled(RoleVideographer),

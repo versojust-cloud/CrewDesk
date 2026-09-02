@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 )
 
 // ─── Errors ─────────────────────────────────────────────────────────
@@ -191,15 +193,15 @@ type ClawRun struct {
 // story_spec.json the user submitted; status is mirrored from the
 // Opendream timeline at periodic refresh points.
 type VideoRun struct {
-	ID              uuid.UUID
-	WorkspaceID     uuid.UUID
-	CreatedBy       uuid.UUID
-	OpendreamRunID  string
-	Title           string
-	Status          string
-	Spec            json.RawMessage
-	StartedAt       time.Time
-	FinishedAt      *time.Time
+	ID             uuid.UUID
+	WorkspaceID    uuid.UUID
+	CreatedBy      uuid.UUID
+	OpendreamRunID string
+	Title          string
+	Status         string
+	Spec           json.RawMessage
+	StartedAt      time.Time
+	FinishedAt     *time.Time
 }
 
 // DesignAsset mirrors the design_assets migration row. Insert-mostly:
@@ -351,17 +353,17 @@ type DesignMemory interface {
 // returned by Insert* methods so the caller (billing.Service) can
 // expose the resulting balance to its own caller.
 type CreditLedgerEntry struct {
-	ID            uuid.UUID
-	WorkspaceID   uuid.UUID
-	AmountMicro   int64 // positive = grant, negative = debit
-	Reason        string
-	Meta          json.RawMessage
-	CreatedAt     time.Time
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	AmountMicro int64 // positive = grant, negative = debit
+	Reason      string
+	Meta        json.RawMessage
+	CreatedAt   time.Time
 	// BalanceAfter is the result of `SUM(amount_micro)` taken
 	// inside the same SQL statement that wrote the row, so it's
 	// consistent with the row's view of the world even under
 	// concurrent writers.
-	BalanceAfter  int64
+	BalanceAfter int64
 }
 
 // CreditLedger is the persistence boundary for the per-workspace
@@ -479,11 +481,12 @@ type Store struct {
 	DesignSessions  DesignSessions // BA — ChatGPT-style design threads
 	DesignMemory    DesignMemory   // BB — cross-session persistent memory
 	IdempotencyKeys IdempotencyKeys
-	CreditLedger    CreditLedger // X3a
-	ToolCalls       ToolCalls    // X3a
-	UserTemplates   UserTemplates // T2 — user-saved theme/brand presets
-	ChatEvents      ChatEvents    // AA.1 — WS event log for replay + persistence
-	ReferenceDecks  ReferenceDecks // BR.3 — RAG corpus for outline planning
+	CreditLedger    CreditLedger        // X3a
+	ToolCalls       ToolCalls           // X3a
+	UserTemplates   UserTemplates       // T2 — user-saved theme/brand presets
+	ChatEvents      ChatEvents          // AA.1 — WS event log for replay + persistence
+	HarnessItems    harness.ItemJournal // CrewDesk lifecycle journal
+	ReferenceDecks  ReferenceDecks      // BR.3 — RAG corpus for outline planning
 
 	// closer is set by the constructor that owns external resources
 	// (e.g. the pgx pool). main.go defers Close on shutdown.

@@ -1,6 +1,10 @@
 package store
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
+)
 
 // NewMemory builds an in-memory Store for tests and for local dev when
 // DATABASE_URL is empty. Phase 2a fills in all job/asset entities;
@@ -24,7 +28,8 @@ func NewMemory() *Store {
 		CreditLedger:    newMemCreditLedger(),
 		ToolCalls:       newMemToolCalls(),
 		UserTemplates:   newMemUserTemplates(),
-		ChatEvents:      newMemChatEvents(),     // AA.1
+		ChatEvents:      newMemChatEvents(), // AA.1
+		HarnessItems:    harness.NewMemoryJournal(),
 		ReferenceDecks:  newMemReferenceDecks(), // BR.3
 	}
 }
