@@ -2,10 +2,12 @@ package claw
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/agent"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/schema"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/tool"
 )
@@ -24,7 +26,17 @@ func subAgentTimeout(role string) time.Duration {
 // as findings for the writer to assemble. Best-effort: a sub-agent error is
 // returned but the orchestrator keeps going with whatever findings exist.
 func (r *Runner) runSubAgent(ctx context.Context, role Role, sess *Session, taskMsg string) (findings string, err error) {
-	tools := append(r.buildTools(role, sess), tool.Terminate{})
+	if scope, ok := harness.RunScopeFromContext(ctx); ok {
+		scope.AgentID = role.Key
+		scope.ActivationID = scope.TurnID + ":" + role.Key
+		ctx = harness.WithRunScope(ctx, scope)
+	}
+
+	resolvedTools, err := r.buildTools(ctx, role, sess)
+	if err != nil {
+		return "", err
+	}
+	tools := append(resolvedTools, tool.Terminate{})
 	registry := tool.NewRegistry(tools...)
 
 	// Bindings are dynamic — tell the agent which tools it ACTUALLY holds so
@@ -52,7 +64,40 @@ func (r *Runner) runSubAgent(ctx context.Context, role Role, sess *Session, task
 // no sandbox / no image provider) simply isn't built — the sub-agent then
 // only has terminate and ends quickly. This is the same graceful-degradation
 // posture as v1.
-func (r *Runner) buildTools(role Role, sess *Session) []tool.Tool {
+func (r *Runner) buildTools(ctx context.Context, role Role, sess *Session) ([]tool.Tool, error) {
+	if r.Harness == nil || r.Harness.Agents == nil || r.Harness.Tools == nil {
+		return r.buildLegacyTools(role, sess), nil
+	}
+	manifest, ok := r.Harness.Agents.Get(role.Key)
+	if !ok {
+		return nil, fmt.Errorf("CrewDesk agent %q is not registered", role.Key)
+	}
+	manifest.Capabilities = r.EffectiveTools(role.Key)
+	for _, capability := range manifest.Capabilities {
+		if capability == "web_search" || capability == "find_kol" {
+			manifest.Permissions.AllowNetwork = true
+		}
+	}
+	runScope, _ := harness.RunScopeFromContext(ctx)
+	instances, _, err := r.Harness.Tools.Build(ctx, harness.ToolScope{
+		Run:     runScope,
+		Agent:   manifest,
+		Journal: r.Harness.Items,
+		Dependencies: map[string]any{
+			clawSessionDependency: sess,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]tool.Tool, 0, len(instances))
+	for _, instance := range instances {
+		out = append(out, instance)
+	}
+	return out, nil
+}
+
+func (r *Runner) buildLegacyTools(role Role, sess *Session) []tool.Tool {
 	var out []tool.Tool
 	for _, name := range r.EffectiveTools(role.Key) {
 		switch name {

@@ -6,31 +6,42 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 )
 
 // ListCrewAgents returns public manifest fields for dynamic clients. System
 // instructions and permission internals stay server-side.
-func (h *handlers) ListCrewAgents(w http.ResponseWriter, _ *http.Request) {
+func (h *handlers) ListCrewAgents(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Harness == nil || h.deps.Harness.Agents == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"agents": []any{}})
 		return
 	}
 	type agentView struct {
-		ID           string            `json:"id"`
-		DisplayName  string            `json:"display_name"`
-		Description  string            `json:"description,omitempty"`
-		ModelTier    string            `json:"model_tier,omitempty"`
-		Capabilities []string          `json:"capabilities,omitempty"`
-		Handoffs     []string          `json:"handoffs,omitempty"`
-		Metadata     map[string]string `json:"metadata,omitempty"`
+		ID           string                   `json:"id"`
+		DisplayName  string                   `json:"display_name"`
+		Description  string                   `json:"description,omitempty"`
+		ModelTier    string                   `json:"model_tier,omitempty"`
+		Capabilities []string                 `json:"capabilities,omitempty"`
+		Tools        []harness.ToolResolution `json:"tools,omitempty"`
+		Handoffs     []string                 `json:"handoffs,omitempty"`
+		Metadata     map[string]string        `json:"metadata,omitempty"`
 	}
 	manifests := h.deps.Harness.Agents.List()
 	agents := make([]agentView, 0, len(manifests))
 	for _, manifest := range manifests {
+		tools, err := h.deps.Harness.Tools.Resolve(r.Context(), harness.ToolScope{
+			Agent:   manifest,
+			Journal: h.deps.Harness.Items,
+		})
+		if err != nil {
+			errorJSON(w, http.StatusInternalServerError, "resolve agent tools: "+err.Error())
+			return
+		}
 		agents = append(agents, agentView{
 			ID: manifest.ID, DisplayName: manifest.DisplayName, Description: manifest.Description,
 			ModelTier: manifest.Model.Tier, Capabilities: manifest.Capabilities,
-			Handoffs: manifest.Handoffs, Metadata: manifest.Metadata,
+			Tools: tools, Handoffs: manifest.Handoffs, Metadata: manifest.Metadata,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})

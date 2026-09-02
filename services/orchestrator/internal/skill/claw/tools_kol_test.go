@@ -16,9 +16,9 @@ func TestExtractEmails(t *testing.T) {
 		{"reach me at hello [at] brand [dot] com", []string{"hello@brand.com"}},
 		{"contact (at) studio (dot) io", []string{"contact@studio.io"}},
 		{"no email here", nil},
-		{"foo@example.com is junk", nil},                      // junk domain dropped
-		{"banner@2x.png not an email", nil},                   // file tail dropped
-		{"handle@astro.globe is a social handle", nil},        // invalid TLD dropped
+		{"foo@example.com is junk", nil},                             // junk domain dropped
+		{"banner@2x.png not an email", nil},                          // file tail dropped
+		{"handle@astro.globe is a social handle", nil},               // invalid TLD dropped
 		{"two: a@b.com and c@d.org", []string{"a@b.com", "c@d.org"}}, // sorted, deduped
 	}
 	for _, c := range cases {
@@ -94,7 +94,11 @@ func TestFindKOLWiring(t *testing.T) {
 		t.Fatal("researcher role not found")
 	}
 	var names []string
-	for _, tl := range r.buildTools(role, &Session{}) {
+	built, err := r.buildTools(context.Background(), role, &Session{})
+	if err != nil {
+		t.Fatalf("buildTools() error = %v", err)
+	}
+	for _, tl := range built {
 		names = append(names, tl.Name())
 	}
 	if !strings.Contains(strings.Join(names, ","), "find_kol") {

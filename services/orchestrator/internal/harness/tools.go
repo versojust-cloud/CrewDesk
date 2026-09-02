@@ -86,6 +86,37 @@ func (c *ToolCatalog) Register(factory ToolFactory) error {
 // BuildRegistry resolves only capabilities declared by the manifest. Missing
 // or disabled tools are returned in the resolution report, not silently added.
 func (c *ToolCatalog) Build(ctx context.Context, scope ToolScope) ([]ToolInstance, []ToolResolution, error) {
+	resolutions, factories, err := c.resolve(ctx, scope)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	built := make([]ToolInstance, 0, len(resolutions))
+	for _, resolution := range resolutions {
+		if !resolution.Availability.Available {
+			continue
+		}
+		factory := factories[resolution.Name]
+		instance, err := factory.Build(ctx, scope)
+		if err != nil {
+			return nil, resolutions, fmt.Errorf("build tool %q: %w", resolution.Name, err)
+		}
+		if instance == nil || instance.Name() != resolution.Name {
+			return nil, resolutions, fmt.Errorf("build tool %q: factory returned mismatched tool", resolution.Name)
+		}
+		built = append(built, instance)
+	}
+	return slices.Clone(built), slices.Clone(resolutions), nil
+}
+
+// Resolve reports availability and policy without constructing scoped tool
+// instances. Planners and clients use it to avoid assigning disabled tools.
+func (c *ToolCatalog) Resolve(ctx context.Context, scope ToolScope) ([]ToolResolution, error) {
+	resolutions, _, err := c.resolve(ctx, scope)
+	return slices.Clone(resolutions), err
+}
+
+func (c *ToolCatalog) resolve(ctx context.Context, scope ToolScope) ([]ToolResolution, map[string]ToolFactory, error) {
 	if err := scope.Agent.Validate(); err != nil {
 		return nil, nil, err
 	}
@@ -96,7 +127,6 @@ func (c *ToolCatalog) Build(ctx context.Context, scope ToolScope) ([]ToolInstanc
 	}
 	c.mu.RUnlock()
 
-	built := make([]ToolInstance, 0, len(scope.Agent.Capabilities))
 	resolutions := make([]ToolResolution, 0, len(scope.Agent.Capabilities))
 	for _, capability := range scope.Agent.Capabilities {
 		factory, ok := factories[capability]
@@ -114,19 +144,8 @@ func (c *ToolCatalog) Build(ctx context.Context, scope ToolScope) ([]ToolInstanc
 		}
 		resolution := ToolResolution{Name: capability, Availability: availability, Policy: policy}
 		resolutions = append(resolutions, resolution)
-		if !availability.Available {
-			continue
-		}
-		instance, err := factory.Build(ctx, scope)
-		if err != nil {
-			return nil, resolutions, fmt.Errorf("build tool %q: %w", capability, err)
-		}
-		if instance == nil || instance.Name() != capability {
-			return nil, resolutions, fmt.Errorf("build tool %q: factory returned mismatched tool", capability)
-		}
-		built = append(built, instance)
 	}
-	return slices.Clone(built), slices.Clone(resolutions), nil
+	return resolutions, factories, nil
 }
 
 // Dependency returns a typed runtime dependency without requiring every

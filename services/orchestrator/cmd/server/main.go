@@ -327,6 +327,10 @@ func main() {
 		// Researcher worker's KOL finder (YouTube Data API v3). nil greys find_kol.
 		KOL: clawKOL,
 	}
+	if err := claw.RegisterHarnessTools(crewRuntime.Tools, clawRunner); err != nil {
+		slog.Error("CrewDesk tool registration", "err", err)
+		os.Exit(1)
+	}
 	// 真·动态改绑 — load persisted role↔tool bindings (file-based so it works
 	// without a database; PUT /claw/roles re-saves it).
 	clawRunner.LoadConfig(filepath.Join(cfg.OutDir, "claw-roles.json"))

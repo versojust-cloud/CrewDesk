@@ -76,7 +76,7 @@ from contaminating later decisions.
 
 ## 6. Tool runtime
 
-The current `buildTools` switch should migrate to a `ToolFactory` registry:
+Execution capabilities are registered through a `ToolFactory` registry:
 
 ```go
 type ToolFactory interface {
@@ -91,6 +91,11 @@ type ToolFactory interface {
 idempotency data. Availability is exposed to planners and clients so disabled
 capabilities are never assigned. Side-effecting tools declare approval and
 sandbox requirements in `ToolPolicy`.
+
+The Claw compatibility pack registers its research, code, writing, image,
+video, deck, and game tools through this contract. Dynamic role bindings only
+change a manifest's effective capability list; construction and availability
+checks remain owned by the Harness catalog.
 
 ## 7. Reliability and evaluation
 
@@ -140,12 +145,16 @@ The backend now includes:
 - a lifecycle journal with monotonic workspace/thread sequences, backed by
   Postgres in deployed environments and memory in local fallback mode;
 - a capability-aware `ToolCatalog` and factory contract;
+- registered factories for all 13 Claw execution tools, including dependency
+  injection, backend availability checks, network gates, and side-effect
+  policies;
 - a non-blocking recording emitter that preserves token streaming while
   writing message/tool lifecycle boundaries into the Harness journal;
 - a new turn identity for every Claw create, continue, and resume operation.
 - discovery and replay APIs at `GET /api/v1/crew/agents` and
-  `GET /api/v1/crew/threads/{id}/items`.
+  `GET /api/v1/crew/threads/{id}/items`; agent discovery now includes each
+  tool's live availability and policy without exposing private prompts.
 
-The next backend change will move existing tools from the role-name switch into
-factories one capability at a time, then execute the current coordinator flow
-through the manager/graph policy.
+The next backend change will execute the current coordinator flow through a
+dependency-aware manager/graph policy, with first-class cancellation, bounded
+retries, and resumable turn state.
