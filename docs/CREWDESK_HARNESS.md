@@ -148,6 +148,10 @@ The backend now includes:
 - registered factories for all 13 Claw execution tools, including dependency
   injection, backend availability checks, network gates, and side-effect
   policies;
+- a validated DAG executor with bounded concurrency, dependency result passing,
+  failure isolation, exponential retry backoff, and cancellation propagation;
+- Claw's researcher, engineer, and designer execution phase running through the
+  graph executor while preserving the existing virtual-office task events;
 - a non-blocking recording emitter that preserves token streaming while
   writing message/tool lifecycle boundaries into the Harness journal;
 - a new turn identity for every Claw create, continue, and resume operation.
@@ -155,6 +159,6 @@ The backend now includes:
   `GET /api/v1/crew/threads/{id}/items`; agent discovery now includes each
   tool's live availability and policy without exposing private prompts.
 
-The next backend change will execute the current coordinator flow through a
-dependency-aware manager/graph policy, with first-class cancellation, bounded
-retries, and resumable turn state.
+The next backend change will add a first-class turn controller and cancellation
+API, then persist graph checkpoints for resumable turns and expose task-level
+retry controls to the virtual-office client.

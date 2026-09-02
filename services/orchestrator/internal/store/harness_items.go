@@ -67,7 +67,7 @@ func (s *pgxHarnessItems) Append(ctx context.Context, item harness.Item) (harnes
 	if item.CreatedAt.IsZero() {
 		item.CreatedAt = now
 	}
-	if (item.Status == harness.ItemCompleted || item.Status == harness.ItemFailed) && item.CompletedAt == nil {
+	if (item.Status == harness.ItemCompleted || item.Status == harness.ItemFailed || item.Status == harness.ItemCancelled) && item.CompletedAt == nil {
 		item.CompletedAt = &now
 	}
 

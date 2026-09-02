@@ -112,7 +112,7 @@ func ValidateItem(item Item) error {
 		return errors.New("harness: item type and status are required")
 	}
 	switch item.Status {
-	case ItemStarted, ItemStreaming, ItemCompleted, ItemFailed:
+	case ItemStarted, ItemStreaming, ItemCompleted, ItemFailed, ItemCancelled:
 		return nil
 	default:
 		return fmt.Errorf("harness: unsupported item status %q", item.Status)
@@ -145,16 +145,16 @@ func validateIdentity(previous, next Item) error {
 func allowedItemTransition(previous, next ItemStatus) bool {
 	switch previous {
 	case ItemStarted:
-		return next == ItemStreaming || next == ItemCompleted || next == ItemFailed
+		return next == ItemStreaming || next == ItemCompleted || next == ItemFailed || next == ItemCancelled
 	case ItemStreaming:
-		return next == ItemStreaming || next == ItemCompleted || next == ItemFailed
+		return next == ItemStreaming || next == ItemCompleted || next == ItemFailed || next == ItemCancelled
 	default:
 		return false
 	}
 }
 
 func isTerminalItemStatus(status ItemStatus) bool {
-	return status == ItemCompleted || status == ItemFailed
+	return status == ItemCompleted || status == ItemFailed || status == ItemCancelled
 }
 
 func cloneItem(item Item) Item {

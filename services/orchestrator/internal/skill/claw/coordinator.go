@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/event"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/llm"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/schema"
 )
@@ -66,8 +67,11 @@ func (r *Runner) coordinate(ctx context.Context, sess *Session, goal string, isF
 
 	// ── Phase 2 — concurrent execution (researcher / engineer / designer) ─
 	endExec := r.phaseSpan(ctx, "exec")
-	findings := r.runExecutionPhase(ctx, sess, goal)
+	findings, executionErr := r.runExecutionPhase(ctx, sess, goal)
 	endExec()
+	if executionErr != nil {
+		return executionErr
+	}
 
 	// ── Phase 3 — writer assembles the report ────────────────────────────
 	endWrite := r.phaseSpan(ctx, "write")
@@ -223,9 +227,9 @@ func (r *Runner) callPlanner(ctx context.Context, sess *Session, goal string, av
 	var b strings.Builder
 	b.WriteString("你是调度员(工头)。把用户的目标拆成 3–7 个有序子任务,每个子任务指派给一个角色。\n可用角色(按其当前持有的工具派活):\n")
 	toolZh := map[string]string{
-		"web_search":     "联网检索事实与来源",
-		"find_kol":       "找网红/达人/KOL(YouTube,带订阅数与公开邮箱)",
-		"code_execute":   "运行代码做计算/解析/核对",
+		"web_search":         "联网检索事实与来源",
+		"find_kol":           "找网红/达人/KOL(YouTube,带订阅数与公开邮箱)",
+		"code_execute":       "运行代码做计算/解析/核对",
 		"generate_image":     "生成配图",
 		"edit_image":         "修图(抠图/高清化/上色/扩图/图生图)",
 		"generate_poster":    "设计海报/宣传图",
@@ -544,11 +548,100 @@ func collapseLines(s string) string {
 
 // ── Phase 2: concurrent execution ────────────────────────────────────────
 
-// runExecutionPhase runs the researcher/engineer/designer sub-agents that the
-// plan assigned, CONCURRENTLY (goroutine + semaphore + WaitGroup, the
-// svg_parallel pattern). Each role's checklist rows flip doing→done around its
-// run. Returns role → findings for the writer to assemble.
-func (r *Runner) runExecutionPhase(ctx context.Context, sess *Session, goal string) map[string]string {
+// runExecutionPhase projects Claw's assigned execution roles onto the generic
+// harness graph. The graph owns concurrency, task lifecycle, failure isolation,
+// and cancellation while the legacy checklist events remain available to the UI.
+func (r *Runner) runExecutionPhase(ctx context.Context, sess *Session, goal string) (map[string]string, error) {
+	scope, scoped := harness.RunScopeFromContext(ctx)
+	if r.Harness == nil || r.Harness.Graph == nil || !scoped {
+		return r.runLegacyExecutionPhase(ctx, sess, goal), nil
+	}
+
+	indicesByTask := make(map[string][]int)
+	rolesByTask := make(map[string]Role)
+	specs := make([]harness.TaskSpec, 0, len(executionRoles()))
+	for _, roleKey := range executionRoles() {
+		idxs := sess.TaskIndicesForRole(roleKey)
+		if len(idxs) == 0 {
+			continue
+		}
+		roleDef, ok := RoleByKey(roleKey)
+		if !ok {
+			continue
+		}
+		if !r.roleEnabled(roleKey) {
+			r.updateExecutionRows(ctx, sess, idxs, TaskSkipped)
+			continue
+		}
+
+		taskID := "execute-" + roleKey
+		indicesByTask[taskID] = idxs
+		rolesByTask[taskID] = roleDef
+		specs = append(specs, harness.TaskSpec{
+			ID:             taskID,
+			Goal:           r.buildRoleTaskMsg(goal, sess, idxs),
+			AssigneeID:     roleKey,
+			ExpectedOutput: "该角色负责子任务的执行结果与关键发现",
+			Metadata: map[string]string{
+				"phase": "execution",
+				"role":  roleKey,
+			},
+		})
+	}
+	if len(specs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	result, err := r.Harness.Graph.Execute(ctx, scope, specs, harness.TaskHandlerFunc(
+		func(taskCtx context.Context, invocation harness.TaskInvocation) (harness.TaskResult, error) {
+			taskID := invocation.Task.Spec.ID
+			roleDef := rolesByTask[taskID]
+			idxs := indicesByTask[taskID]
+			r.updateExecutionRows(taskCtx, sess, idxs, TaskDoing)
+
+			out, runErr := r.runSubAgent(taskCtx, roleDef, sess, invocation.Task.Spec.Goal)
+			rowStatus := TaskDone
+			if runErr != nil {
+				rowStatus = TaskSkipped
+			}
+			r.updateExecutionRows(taskCtx, sess, idxs, rowStatus)
+
+			encoded, marshalErr := json.Marshal(out)
+			if marshalErr != nil {
+				return harness.TaskResult{}, marshalErr
+			}
+			return harness.TaskResult{Output: encoded}, runErr
+		},
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	findings := make(map[string]string, len(result.Results))
+	for taskID, taskResult := range result.Results {
+		roleDef, ok := rolesByTask[taskID]
+		if !ok {
+			continue
+		}
+		var output string
+		if json.Unmarshal(taskResult.Output, &output) == nil && strings.TrimSpace(output) != "" {
+			findings[roleDef.Key] = output
+		}
+	}
+	return findings, nil
+}
+
+func (r *Runner) updateExecutionRows(ctx context.Context, sess *Session, idxs []int, status string) {
+	for _, i := range idxs {
+		if sess.UpdateTask(i, status) {
+			r.emit(ctx, event.NewClawTaskUpdate(i, status))
+		}
+	}
+}
+
+// runLegacyExecutionPhase keeps direct Runner use compatible when no harness
+// runtime or run scope has been supplied, including existing unit tests.
+func (r *Runner) runLegacyExecutionPhase(ctx context.Context, sess *Session, goal string) map[string]string {
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
@@ -581,23 +674,19 @@ func (r *Runner) runExecutionPhase(ctx context.Context, sess *Session, goal stri
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			for _, i := range idxs {
-				if sess.UpdateTask(i, TaskDoing) {
-					r.emit(ctx, event.NewClawTaskUpdate(i, TaskDoing))
-				}
-			}
+			r.updateExecutionRows(ctx, sess, idxs, TaskDoing)
 
-			out, _ := r.runSubAgent(ctx, roleDef, sess, r.buildRoleTaskMsg(goal, sess, idxs))
+			out, runErr := r.runSubAgent(ctx, roleDef, sess, r.buildRoleTaskMsg(goal, sess, idxs))
 
 			mu.Lock()
 			findings[roleDef.Key] = out
 			mu.Unlock()
 
-			for _, i := range idxs {
-				if sess.UpdateTask(i, TaskDone) {
-					r.emit(ctx, event.NewClawTaskUpdate(i, TaskDone))
-				}
+			rowStatus := TaskDone
+			if runErr != nil {
+				rowStatus = TaskSkipped
 			}
+			r.updateExecutionRows(ctx, sess, idxs, rowStatus)
 		}(roleDef, idxs)
 	}
 	wg.Wait()

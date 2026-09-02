@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/event"
+	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/harness"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/image"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/llm"
 	"github.com/dreamwaver/dreamwaver/services/orchestrator/internal/schema"
@@ -25,7 +26,7 @@ type fakeRouter struct {
 	steps    map[string]int // role → think-step count
 }
 
-func (f *fakeRouter) Name() string          { return "fake" }
+func (f *fakeRouter) Name() string           { return "fake" }
 func (f *fakeRouter) For(string) llm.Client  { return f }
 func (f *fakeRouter) ModelFor(string) string { return "fake-model" }
 
@@ -182,8 +183,25 @@ func TestCoordinatorWorkPackage(t *testing.T) {
 		Images:        fakeImages{},
 		ImagesEnabled: true,
 	}
+	agentRegistry, err := harness.NewRegistry(HarnessManifests()...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	catalog, err := harness.NewToolCatalog()
+	if err != nil {
+		t.Fatalf("NewToolCatalog: %v", err)
+	}
+	journal := harness.NewMemoryJournal()
+	r.Harness, err = harness.NewRuntime(agentRegistry, catalog, journal)
+	if err != nil {
+		t.Fatalf("NewRuntime: %v", err)
+	}
+	if err := RegisterHarnessTools(catalog, r); err != nil {
+		t.Fatalf("RegisterHarnessTools: %v", err)
+	}
 
 	ctx := event.WithSessionID(context.Background(), "sess-1")
+	ctx = harness.WithRunScope(ctx, harness.RunScope{ThreadID: "sess-1", TurnID: "turn-1"})
 	if err := r.Run(ctx, "job-1", "做一份带图的对比报告"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -220,6 +238,21 @@ func TestCoordinatorWorkPackage(t *testing.T) {
 		if task.Status != TaskDone {
 			t.Fatalf("task %d (%s) status=%q, want done", i+1, task.Role, task.Status)
 		}
+	}
+	items, err := journal.ListSince(context.Background(), "", "sess-1", 0, 100)
+	if err != nil {
+		t.Fatalf("ListSince: %v", err)
+	}
+	var graphStarted, graphCompleted bool
+	for _, item := range items {
+		if item.TaskID != "execute-designer" {
+			continue
+		}
+		graphStarted = graphStarted || item.Status == harness.ItemStarted
+		graphCompleted = graphCompleted || item.Status == harness.ItemCompleted
+	}
+	if !graphStarted || !graphCompleted {
+		t.Fatalf("designer graph lifecycle missing: started=%v completed=%v items=%+v", graphStarted, graphCompleted, items)
 	}
 }
 

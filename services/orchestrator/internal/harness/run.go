@@ -85,6 +85,15 @@ type TaskSpec struct {
 	Input          json.RawMessage   `json:"input,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
 	Limits         RunLimits         `json:"limits"`
+	Retry          RetryPolicy       `json:"retry"`
+}
+
+// RetryPolicy bounds transient retries for one task. Zero MaxAttempts means
+// one attempt. Backoff values are milliseconds to keep the API JSON stable.
+type RetryPolicy struct {
+	MaxAttempts      int `json:"max_attempts,omitempty"`
+	InitialBackoffMs int `json:"initial_backoff_ms,omitempty"`
+	MaxBackoffMs     int `json:"max_backoff_ms,omitempty"`
 }
 
 type Task struct {
@@ -117,6 +126,7 @@ const (
 	ItemStreaming ItemStatus = "streaming"
 	ItemCompleted ItemStatus = "completed"
 	ItemFailed    ItemStatus = "failed"
+	ItemCancelled ItemStatus = "cancelled"
 )
 
 // Item is the append-only execution record used by persistence, streaming,

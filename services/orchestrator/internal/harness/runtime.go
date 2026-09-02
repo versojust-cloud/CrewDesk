@@ -9,6 +9,7 @@ type Runtime struct {
 	Agents *Registry
 	Tools  *ToolCatalog
 	Items  ItemJournal
+	Graph  *GraphExecutor
 }
 
 func NewRuntime(agents *Registry, tools *ToolCatalog, items ItemJournal) (*Runtime, error) {
@@ -21,5 +22,10 @@ func NewRuntime(agents *Registry, tools *ToolCatalog, items ItemJournal) (*Runti
 	if items == nil {
 		return nil, errors.New("harness: item journal is required")
 	}
-	return &Runtime{Agents: agents, Tools: tools, Items: items}, nil
+	return &Runtime{
+		Agents: agents,
+		Tools:  tools,
+		Items:  items,
+		Graph:  NewGraphExecutor(items, 4),
+	}, nil
 }
