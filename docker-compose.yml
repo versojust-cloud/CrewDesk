@@ -54,7 +54,10 @@ services:
 
   orchestrator:
     build:
-      context: ./services/orchestrator
+      # The Dockerfile lives at the repo root and needs the root as its
+      # context so it can copy in both services/orchestrator/ and
+      # packages/slide-templates/. See the header of ./Dockerfile.
+      context: .
       dockerfile: Dockerfile
     depends_on:
       postgres:
@@ -74,6 +77,11 @@ services:
       S3_BUCKET: dreamwaver
       S3_REGION: us-east-1
       SANDBOX_GRPC_ADDR: sandbox:50051
+      # DeepSeek is the only wired provider and the orchestrator exits at
+      # startup without its key, so this one is required (not optional).
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_PRIMARY_PROVIDER: ${LLM_PRIMARY_PROVIDER:-deepseek}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
