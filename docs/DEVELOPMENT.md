@@ -4,10 +4,10 @@
 
 | Tool        | Version | Why                                     |
 | ----------- | ------- | --------------------------------------- |
-| Go          | 1.23+   | orchestrator service                    |
+| Go          | 1.26+   | orchestrator service (see `go.mod`)     |
 | Rust        | 1.80+   | sandbox service                         |
 | Node        | 20+     | Next.js web                             |
-| pnpm        | 9+      | preferred package manager for web       |
+| pnpm        | 10+     | web package manager (lockfile format)   |
 | Docker      | latest  | local Postgres / Redis / MinIO / build  |
 | protoc      | 25+     | regenerate gRPC code from `proto/`      |
 
@@ -15,7 +15,8 @@
 
 ```bash
 cp .env.example .env
-# at minimum set ANTHROPIC_API_KEY=sk-ant-...
+# Required: DEEPSEEK_API_KEY=sk-...  (the orchestrator exits at startup
+# without it, and deepseek is the only implemented provider)
 
 make dev          # docker-compose up --build
 # orchestrator → http://localhost:8080
