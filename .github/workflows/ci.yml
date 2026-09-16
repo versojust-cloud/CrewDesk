@@ -114,6 +114,18 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install protoc
+        # sandbox/build.rs calls tonic-build, which shells out to protoc to
+        # regenerate the gRPC bindings from proto/dreamwaver/v1/sandbox.proto
+        # at build time. Without it `cargo check` dies with
+        # "Could not find `protoc`". The Go job doesn't need this — it
+        # compiles against the generated bindings committed under
+        # services/orchestrator/internal/pb/.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+
       - name: Cargo cache
         uses: actions/cache@v4
         with:
