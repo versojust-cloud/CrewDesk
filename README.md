@@ -9,9 +9,6 @@
 - **生产可上线**：SaaS 化（多租户、Credit 计费、可观测、可扩展）
 - **性能 & 安全**：Go orchestrator 负责并发编排，Rust 沙箱负责隔离执行用户/Agent 代码
 - **HTML-first PPT**：Tailwind 模板 + chromedp 渲染 + unioffice 组装 PPTX；用户拿到的是可编辑的真 PPTX
-- **多 LLM 可切换（尚未落地）**：目前只接入了 DeepSeek v4-pro（OpenAI 兼容 API）。
-  多 provider 路由还在路线图 Week 4 —— `config.go` 的 provider 分支现在只实现 deepseek，
-  把 `LLM_PRIMARY_PROVIDER` 切成 anthropic / openai 会直接启动失败
 
 ## 仓库结构
 
