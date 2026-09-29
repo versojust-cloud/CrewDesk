@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // apps/web/Dockerfile ships the production image by copying
+  // .next/standalone, which Next only emits when this is set. Without it
+  // the runner stage's COPY fails and the web image can't be built.
+  output: 'standalone',
   // Default proxy timeout is 30s — way too short for the synchronous
   // design endpoints. NanoBanana typically lands in 30s but spikes to
   // 60s+, Seedance i2v runs 60-180s for 720p and can hit 240s+ for

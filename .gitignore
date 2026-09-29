@@ -96,6 +96,11 @@ htmlcov/
 *.sublime-project
 *.sublime-workspace
 .zed/
+# Eclipse writes these into the project root the moment you import the repo
+# as an existing project, so they show up untracked for anyone on Eclipse.
+.project
+.classpath
+.settings/
 
 # ─── OS junk ─────────────────────────────────────────────────────────────────
 .DS_Store
